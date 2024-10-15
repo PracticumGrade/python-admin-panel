@@ -1,0 +1,86 @@
+name: Movies admin autotests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  movies-admin-linter:
+    if: |
+      github.ref == 'refs/heads/main' ||
+      github.head_ref == 'feature/movies-admin' ||
+      github.head_ref == 'feature/sqlite-to-postgres'
+    runs-on: ubuntu-latest
+    container: python:3.12
+    steps:
+      # Downloads a copy of the code in your repository before running code quality test
+      - name: Checkout code
+        uses: actions/checkout@v4
+      #Starts flake8 linter
+      - name: Test code quality
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pep8-naming flake8-broken-line flake8-return flake8-isort
+          cd ./movies_admin
+          python -m flake8
+
+  movies-admin-test:
+    if: |
+      github.ref == 'refs/heads/main' ||
+      github.head_ref == 'feature/movies-admin' ||
+      github.head_ref == 'feature/sqlite-to-postgres'
+    needs: [ movies-admin-linter ]
+    runs-on: ubuntu-latest
+    container: python:3.12
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_DB: movies_database
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: 123qwe
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    # Downloads a copy of the code in your repository before running CI tests
+    - name: Check out repository code
+      uses: actions/checkout@v4
+
+    - name: Test code functionality
+      env:
+        POSTGRES_DB: movies_database
+        POSTGRES_USER: app
+        POSTGRES_PASSWORD: 123qwe
+        SQL_HOST: postgres
+        SQL_PORT: 5432
+      run: |
+        cd ./movies_admin
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        python manage.py test
+
+  movies-control-code:
+    if: |
+      github.ref == 'refs/heads/main' ||
+      github.head_ref == 'feature/movies-admin' ||
+      github.head_ref == 'feature/sqlite-to-postgres'
+    name: control-code
+    needs: [ movies-admin-test ]
+    runs-on: ubuntu-latest
+    container: python:3.12
+    steps:
+      # Downloads a copy of the code in your repository before running code quality test
+      - name: Checkout code
+        uses: actions/checkout@v4
+      #Starts sqlfluff linter
+      - name: Check Workflow Status
+        run: |
+          ./.github/workflows/code_generator -t ./movies_admin/tests
